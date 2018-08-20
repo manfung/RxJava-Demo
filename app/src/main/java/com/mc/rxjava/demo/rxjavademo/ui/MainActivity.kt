@@ -7,7 +7,6 @@ import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import com.mc.rxjava.demo.rxjavademo.R
 import com.mc.rxjava.demo.rxjavademo.data.db.AppDatabase
-import com.mc.rxjava.demo.rxjavademo.data.db.PostDao
 import com.mc.rxjava.demo.rxjavademo.data.model.Post
 import com.mc.rxjava.demo.rxjavademo.data.remote.response.ApiPost
 import com.mc.rxjava.demo.rxjavademo.utils.plusAssign
@@ -37,13 +36,15 @@ class MainActivity : AppCompatActivity() {
 
     }
 
-    private lateinit var postsDao: PostDao
+    private val postsDao by lazy {
+        AppDatabase.getInstance(applicationContext).postDao()
+    }
+
     private val compositeDisposable = CompositeDisposable()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
-        postsDao = AppDatabase.getInstance(applicationContext).postDao()
 
     }
 
@@ -89,8 +90,7 @@ class MainActivity : AppCompatActivity() {
 
     private fun convertToListOfDatabaseEntities(posts:List<ApiPost>):List<Post> {
 
-        var postEntities: List<Post> = posts.map { convertToDatabaseEntity(it) }
-        return postEntities
+        return posts.map { convertToDatabaseEntity(it) }
     }
 
 
@@ -123,10 +123,6 @@ class MainActivity : AppCompatActivity() {
                         { error ->
                             // onError
                             log("Error retrieving posts from db: " + error.message)
-                        },
-                        {
-                            // onComplete
-                            log("1111 no posts retrieved from database")
                         }
                 )
     }
