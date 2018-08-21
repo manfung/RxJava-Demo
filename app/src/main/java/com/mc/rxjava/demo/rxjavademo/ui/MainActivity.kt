@@ -12,13 +12,13 @@ import com.mc.rxjava.demo.rxjavademo.data.remote.response.ApiPost
 import com.mc.rxjava.demo.rxjavademo.utils.plusAssign
 import com.tephra.mc.latestnews.data.repository.ApiService
 import io.reactivex.Completable
+import io.reactivex.Observable
 import io.reactivex.android.schedulers.AndroidSchedulers
 import io.reactivex.disposables.CompositeDisposable
 import io.reactivex.schedulers.Schedulers
 import retrofit2.Retrofit
 import retrofit2.adapter.rxjava2.RxJava2CallAdapterFactory
 import retrofit2.converter.gson.GsonConverterFactory
-
 
 class MainActivity : AppCompatActivity() {
 
@@ -41,6 +41,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private val compositeDisposable = CompositeDisposable()
+    private var postsInCache = mutableListOf<Post>()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -53,47 +54,41 @@ class MainActivity : AppCompatActivity() {
                 .subscribeOn(Schedulers.io())               // observable will run on IO thread.
                 .observeOn(AndroidSchedulers.mainThread())  // observer will run on main thread.
                 .subscribe(                                 // ubscribe the observer, which runs on the thread define in 'observeOn'
-                        { posts ->
+                        {
                             // onSucess - Single, Maybe and Completable observables have onNext() and onComplete()
                             // combined to onSucess as the stream has only one single item (1 response) to emit
-                            log(posts.size.toString() + " post retrieved from remote")
+                            log(it.size.toString() + " post retrieved from remote")
                         },
-                        { error ->
+                        {
                             // onError
-                            log("Error retrieving posts from remote: " + error.message)
+                            log("Error retrieving posts from remote: " + it.message)
                         }
                 )
     }
 
     fun getPostsFromRemoteAndSaveToDatabase(v: View) {
 
-        compositeDisposable += apiService.getAllPostsAsObservable() // gets an Observable object
+        compositeDisposable += apiService.getAllPostsAsSingle() // gets an Single observable
                 .subscribeOn(Schedulers.io()) //observer will run on main thread.
                 .map {
                     // convert from ApiPost to Post objects using the map operator
-                    posts ->
-                        log("convert from ApiPost to Post", showToast = false)
-                        convertToListOfDatabaseEntities(posts)
+                    log("convert from ApiPost to Post", showToast = false)
+                    convertToListOfDatabaseEntities(it)
                 }
-                .doOnNext {
+                .doOnSuccess {
                     // save to database on the 'subscribeOn' thread
-                    posts ->
-                        log("Saving to database", showToast = false)
-                        postsDao.insertPosts(posts)
+                    log("Saving to database", showToast = false)
+                    postsDao.insertPosts(it)
                 }
                 .observeOn(AndroidSchedulers.mainThread())
                 .subscribe( // runs on the 'observeOn' thread
-                        { posts ->
-                            // onNext
-                            log(posts.size.toString() + " post retrieved from remote")
-                        },
-                        { error ->
-                            // onError
-                            log("Error retrieving posts from remote: " + error.message)
+                        {
+                            // onSuccess
+                            log(it.size.toString() + " post retrieved from remote")
                         },
                         {
-                            // omComplete
-                            log("remote call complete")
+                            // onError
+                            log("Error retrieving posts from remote: " + it.message)
                         }
                 )
     }
@@ -104,27 +99,114 @@ class MainActivity : AppCompatActivity() {
                 .subscribeOn(Schedulers.io())
                 .observeOn(AndroidSchedulers.mainThread())
                 .subscribe(
-                        { posts ->
+                        {
                             // onNext
-                            log(posts.size.toString() + " post retrieved from database")
+                            log(it.size.toString() + " post retrieved from database")
                         },
-                        { error ->
+                        {
                             // onError
-                            log("Error retrieving posts from db: " + error.message)
+                            log("Error retrieving posts from db: " + it.message)
                         }
                 )
     }
 
-    fun clearDb(v: View) {
+    fun clearDatabaseAndCache(v: View) {
 
-        compositeDisposable += Completable.fromAction {
-                log("Deleting all posts in database", showToast = false)
-                postsDao.deleteAll()}
-             .subscribeOn(Schedulers.io())
-             .observeOn(AndroidSchedulers.mainThread())
-             .subscribe {
-                log("Database cleared")
-             }
+        compositeDisposable += Completable // Use a Completable as we don't care about any response just weather success/error of execution
+                .fromAction {
+                    log("Deleting all posts in database", showToast = false)
+                    postsDao.deleteAll()
+                }
+                .subscribeOn(Schedulers.io())
+                .observeOn(AndroidSchedulers.mainThread())
+                .subscribe (
+                    {
+                        // onComplete
+                        log("Database cleared")
+                    },
+                    {
+                        // onError
+                        log("Error trying to clear database")
+                    }
+                )
+
+        postsInCache.clear()
+    }
+
+    /**
+    *  Use map instead of filter, in this example the Dao.getAll() is not calling onComplete otherwise
+    *  see flatMapIterable and toList
+    *  https://stackoverflow.com/questions/26599891/collecting-observables-to-a-list-doesnt-seem-to-emit-the-collection-at-once
+    **/
+    fun getFilteredPostsFromDb(v: View) {
+
+        compositeDisposable += postsDao.getAll()
+                .subscribeOn(Schedulers.io())
+                .observeOn(AndroidSchedulers.mainThread())
+                .map {
+                    log("filter posts", showToast = false)
+                    it.filter { it.userId == 1 }
+                }
+                .subscribe(
+                        {
+                            // onNext
+                            log(it.size.toString() + " filtered post retrieved from database")
+                        },
+                        {
+                            // onError
+                            log("Error retrieving filtered posts from db: " + it.message)
+                        }
+                )
+    }
+
+    fun getPostsFromRemoteAndDatabase(v: View) {
+        compositeDisposable += getPostsObservable()
+                .observeOn(AndroidSchedulers.mainThread())
+                .subscribe(
+                        {
+                            // onNext
+                            log(postsInCache.size.toString() + " posts retrieved from remote and database")
+                        },
+                        {
+                            // onError
+                            log("Error retrieving posts from remote and db: " + it.message)
+                        }
+                )
+    }
+
+    private fun getPostsObservable():Observable<List<Post>> {
+
+        val postsFromDB = postsDao.getAll()
+                .subscribeOn(Schedulers.io())
+                .doOnNext {
+                    log(it.size.toString() + " posts From Database", showToast = false)
+                    cacheInMemory(it)
+                }
+
+        val postsFromRemote = apiService.getAllPostsAsObservable()  // get the observable, in this instance its a Single (has only 1 response)
+                .subscribeOn(Schedulers.io())                       // observable will run on IO thread.
+                .map {
+                    // convert from ApiPost to Post objects using the map operator
+                    log("convert from ApiPost to Post", showToast = false)
+                    convertToListOfDatabaseEntities(it)
+                }
+                .doOnNext {
+                    log(it.size.toString() + " posts From Remote", showToast = false)
+                    cacheInMemory(it)
+                }
+
+        return Observable.concat(postsFromRemote, postsFromDB )
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        if (!compositeDisposable.isDisposed) {
+            compositeDisposable.dispose()
+        }
+    }
+
+    private fun cacheInMemory(posts: List<Post>) {
+        postsInCache.addAll(posts)
     }
 
     private fun convertToListOfDatabaseEntities(posts:List<ApiPost>):List<Post> {
@@ -141,18 +223,11 @@ class MainActivity : AppCompatActivity() {
             )
     }
 
-    override fun onPause() {
-        super.onPause()
-        if (!compositeDisposable.isDisposed) {
-            compositeDisposable.dispose()
-        }
-    }
-
     private fun log(msg: String, showToast: Boolean = true) {
         if (showToast) {
             Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
         }
-        Log.i(TAG, msg + " - Running on thread:" + Thread.currentThread().id)
+        Log.i(TAG, msg + " - Running on thread: " + Thread.currentThread().id)
     }
 
 }
