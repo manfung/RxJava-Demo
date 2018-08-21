@@ -45,17 +45,17 @@ class MainActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
-
     }
 
     fun getPostsFromRemote(v: View) {
 
-        compositeDisposable += apiService.getAllPostsAsSingle()
-                .subscribeOn(Schedulers.io())
-                .observeOn(AndroidSchedulers.mainThread())
-                .subscribe(
+        compositeDisposable += apiService.getAllPostsAsSingle() // get the observable, in this instance its a Single (has only 1 response)
+                .subscribeOn(Schedulers.io())               // observable will run on IO thread.
+                .observeOn(AndroidSchedulers.mainThread())  // observer will run on main thread.
+                .subscribe(                                 // ubscribe the observer, which runs on the thread define in 'observeOn'
                         { posts ->
-                            // onNext
+                            // onSucess - Single, Maybe and Completable observables have onNext() and onComplete()
+                            // combined to onSucess as the stream has only one single item (1 response) to emit
                             log(posts.size.toString() + " post retrieved from remote")
                         },
                         { error ->
@@ -67,12 +67,22 @@ class MainActivity : AppCompatActivity() {
 
     fun getPostsFromRemoteAndSaveToDatabase(v: View) {
 
-        compositeDisposable += apiService.getAllPostsAsObservable()
-                .subscribeOn(Schedulers.io())
-                .map { posts ->  convertToListOfDatabaseEntities(posts) } // convert from ApiPost to Post objects
-                .doOnNext {  posts ->  postsDao.insertPosts(posts)} // save to database
+        compositeDisposable += apiService.getAllPostsAsObservable() // gets an Observable object
+                .subscribeOn(Schedulers.io()) //observer will run on main thread.
+                .map {
+                    // convert from ApiPost to Post objects using the map operator
+                    posts ->
+                        log("convert from ApiPost to Post", false)
+                        convertToListOfDatabaseEntities(posts)
+                }
+                .doOnNext {
+                    // save to database on the 'subscribeOn' thread
+                    posts ->
+                        log("Saving to database", false)
+                        postsDao.insertPosts(posts)
+                }
                 .observeOn(AndroidSchedulers.mainThread())
-                .subscribe(
+                .subscribe( // runs on the 'observeOn' thread
                         { posts ->
                             // onNext
                             log(posts.size.toString() + " post retrieved from remote")
@@ -86,28 +96,6 @@ class MainActivity : AppCompatActivity() {
                             log("remote call complete")
                         }
                 )
-    }
-
-    private fun convertToListOfDatabaseEntities(posts:List<ApiPost>):List<Post> {
-
-        return posts.map { convertToDatabaseEntity(it) }
-    }
-
-
-    private fun convertToDatabaseEntity(post:ApiPost):Post {
-
-        return Post(userId = post.userId,
-                id = post.id,
-                title = post.title,
-                body = post.body
-            )
-    }
-
-    override fun onPause() {
-        super.onPause()
-        if (!compositeDisposable.isDisposed) {
-            compositeDisposable.dispose()
-        }
     }
 
     fun getPostsFromDb(v: View) {
@@ -130,19 +118,40 @@ class MainActivity : AppCompatActivity() {
     fun clearDb(v: View) {
 
         compositeDisposable += Completable.fromAction {
-                postsDao.deleteAll()
-            }
-            .subscribeOn(Schedulers.io())
-            .observeOn(AndroidSchedulers.mainThread())
-            .subscribe {
+                postsDao.deleteAll()}
+             .subscribeOn(Schedulers.io())
+             .observeOn(AndroidSchedulers.mainThread())
+             .subscribe {
                 log("Database cleared")
-            }
-
+             }
     }
 
-    private fun log(msg: String) {
-        Toast.makeText(this,msg, Toast.LENGTH_SHORT).show()
-        Log.i(TAG,msg)
+    private fun convertToListOfDatabaseEntities(posts:List<ApiPost>):List<Post> {
+
+        return posts.map { convertToDatabaseEntity(it) }
+    }
+
+    private fun convertToDatabaseEntity(post:ApiPost):Post {
+
+        return Post(userId = post.userId,
+                id = post.id,
+                title = post.title,
+                body = post.body
+            )
+    }
+
+    override fun onPause() {
+        super.onPause()
+        if (!compositeDisposable.isDisposed) {
+            compositeDisposable.dispose()
+        }
+    }
+
+    private fun log(msg: String, showToast: Boolean = true) {
+        if (showToast) {
+            Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
+        }
+        Log.i(TAG, msg + " - Running on thread:" + Thread.currentThread().id)
     }
 
 }
