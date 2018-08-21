@@ -72,13 +72,13 @@ class MainActivity : AppCompatActivity() {
                 .map {
                     // convert from ApiPost to Post objects using the map operator
                     posts ->
-                        log("convert from ApiPost to Post", false)
+                        log("convert from ApiPost to Post", showToast = false)
                         convertToListOfDatabaseEntities(posts)
                 }
                 .doOnNext {
                     // save to database on the 'subscribeOn' thread
                     posts ->
-                        log("Saving to database", false)
+                        log("Saving to database", showToast = false)
                         postsDao.insertPosts(posts)
                 }
                 .observeOn(AndroidSchedulers.mainThread())
