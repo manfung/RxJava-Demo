@@ -118,6 +118,7 @@ class MainActivity : AppCompatActivity() {
     fun clearDb(v: View) {
 
         compositeDisposable += Completable.fromAction {
+                log("Deleting all posts in database", showToast = false)
                 postsDao.deleteAll()}
              .subscribeOn(Schedulers.io())
              .observeOn(AndroidSchedulers.mainThread())
