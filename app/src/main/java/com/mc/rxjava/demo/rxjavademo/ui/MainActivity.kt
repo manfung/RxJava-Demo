@@ -16,6 +16,7 @@ import io.reactivex.Observable
 import io.reactivex.android.schedulers.AndroidSchedulers
 import io.reactivex.disposables.CompositeDisposable
 import io.reactivex.schedulers.Schedulers
+import kotlinx.android.synthetic.main.activity_main.*
 import retrofit2.Retrofit
 import retrofit2.adapter.rxjava2.RxJava2CallAdapterFactory
 import retrofit2.converter.gson.GsonConverterFactory
@@ -53,6 +54,14 @@ class MainActivity : AppCompatActivity() {
         compositeDisposable += apiService.getAllPostsAsSingle() // get the observable, in this instance its a Single (has only 1 response)
                 .subscribeOn(Schedulers.io())               // observable will run on IO thread.
                 .observeOn(AndroidSchedulers.mainThread())  // observer will run on main thread.
+                .doOnSubscribe {
+                    progressBar.visibility = View.VISIBLE
+                    log("Show load progress", showToast = false)
+                }
+                .doFinally{
+                    progressBar.visibility = View.GONE
+                    log("Hide load progress", showToast = false)
+                }
                 .subscribe(                                 // ubscribe the observer, which runs on the thread define in 'observeOn'
                         {
                             // onSucess - Single, Maybe and Completable observables have onNext() and onComplete()
