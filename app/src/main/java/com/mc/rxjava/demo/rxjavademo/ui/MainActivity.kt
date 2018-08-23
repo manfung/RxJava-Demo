@@ -73,7 +73,7 @@ class MainActivity : AppCompatActivity() {
                 .map {
                     // convert from ApiPost to Post objects using the map operator
                     log("convert from ApiPost to Post", showToast = false)
-                    convertToListOfDatabaseEntities(it)
+                    it.map { convertToDatabaseEntity(it) }
                 }
                 .doOnSuccess {
                     // save to database on the 'subscribeOn' thread
@@ -188,7 +188,7 @@ class MainActivity : AppCompatActivity() {
                 .map {
                     // convert from ApiPost to Post objects using the map operator
                     log("convert from ApiPost to Post", showToast = false)
-                    convertToListOfDatabaseEntities(it)
+                    it.map { convertToDatabaseEntity(it) }
                 }
                 .doOnNext {
                     log(it.size.toString() + " posts From Remote", showToast = false)
@@ -207,11 +207,6 @@ class MainActivity : AppCompatActivity() {
 
     private fun cacheInMemory(posts: List<Post>) {
         postsInCache.addAll(posts)
-    }
-
-    private fun convertToListOfDatabaseEntities(posts:List<ApiPost>):List<Post> {
-
-        return posts.map { convertToDatabaseEntity(it) }
     }
 
     private fun convertToDatabaseEntity(post:ApiPost):Post {
