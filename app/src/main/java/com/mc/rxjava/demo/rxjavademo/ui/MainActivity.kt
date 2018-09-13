@@ -62,7 +62,7 @@ class MainActivity : AppCompatActivity() {
                     progressBar.visibility = View.GONE
                     log("Hide load progress", showToast = false)
                 }
-                .subscribe(                                 // ubscribe the observer, which runs on the thread define in 'observeOn'
+                .subscribe(                                 // subscribe the observer, which runs on the thread define in 'observeOn'
                         {
                             // onSucess - Single, Maybe and Completable observables have onNext() and onComplete()
                             // combined to onSucess as the stream has only one single item (1 response) to emit
@@ -78,8 +78,8 @@ class MainActivity : AppCompatActivity() {
     fun getPostsFromRemoteAndSaveToDatabase(v: View) {
 
         compositeDisposable += apiService.getAllPostsAsSingle() // gets an Single observable
-                .subscribeOn(Schedulers.io()) //observer will run on main thread.
-                .map {
+                .subscribeOn(Schedulers.io()) //observer will run on thread intended for IO-bound work.
+                .map {// Map applies a function to each emitted object
                     // convert from ApiPost to Post objects using the map operator
                     log("convert from ApiPost to Post", showToast = false)
                     it.map { convertToDatabaseEntity(it) }
@@ -126,7 +126,7 @@ class MainActivity : AppCompatActivity() {
                     log("Deleting all posts in database", showToast = false)
                     postsDao.deleteAll()
                 }
-                .subscribeOn(Schedulers.io())
+                .subscribeOn(Schedulers.computation())
                 .observeOn(AndroidSchedulers.mainThread())
                 .subscribe (
                     {
